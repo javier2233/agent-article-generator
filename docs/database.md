@@ -19,6 +19,7 @@ Los modelos están en `models.py`. Cada entidad sigue este patrón:
 | `ArticleBase` | No | Campos comunes que comparten el resto de clases |
 | `Article` | Sí | La tabla de la base de datos |
 | `ArticleCreate` | No | Cuerpo de entrada de `POST /articles` |
+| `ArticleGenerate` | No | Cuerpo de entrada de `POST /articles/generate`: `topic` y `section_id` opcional. No es una tabla ni cambia el esquema |
 | `ArticleRead` | No | Respuesta de la API |
 | `ArticleUpdate` | No | Cuerpo de `PATCH /articles/{id}`: todos los campos opcionales. `title` y `content` no admiten `null`; `section_id` sí (quita la sección) |
 

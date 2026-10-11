@@ -1,10 +1,21 @@
+import logging
 import uuid
 
 from fastapi import APIRouter, HTTPException
 from sqlmodel import select
 
+from agents.writer import generate_article
 from api.deps import SessionDep
-from models import Article, ArticleCreate, ArticleRead, ArticleUpdate, Section
+from models import (
+    Article,
+    ArticleCreate,
+    ArticleGenerate,
+    ArticleRead,
+    ArticleUpdate,
+    Section,
+)
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/articles", tags=["articles"])
 
@@ -14,6 +25,27 @@ def create_article(article: ArticleCreate, session: SessionDep):
     if article.section_id and not session.get(Section, article.section_id):
         raise HTTPException(status_code=422, detail="Section not found")
     db_article = Article.model_validate(article)
+    session.add(db_article)
+    session.commit()
+    session.refresh(db_article)
+    return db_article
+
+
+@router.post("/generate", response_model=ArticleRead, status_code=201)
+def generate(request: ArticleGenerate, session: SessionDep):
+    section = None
+    if request.section_id:
+        section = session.get(Section, request.section_id)
+        if not section:
+            raise HTTPException(status_code=422, detail="Section not found")
+    try:
+        generated = generate_article(request.topic, section.title if section else None)
+    except Exception:
+        logger.exception("Article generation failed")
+        raise HTTPException(status_code=502, detail="Article generation failed")
+    db_article = Article(
+        title=generated.title, content=generated.content, section_id=request.section_id
+    )
     session.add(db_article)
     session.commit()
     session.refresh(db_article)

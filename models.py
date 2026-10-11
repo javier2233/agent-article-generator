@@ -58,6 +58,11 @@ class ArticleCreate(ArticleBase):
     pass
 
 
+class ArticleGenerate(SQLModel):
+    topic: str = Field(min_length=1, max_length=1000)
+    section_id: uuid.UUID | None = None
+
+
 class ArticleRead(ArticleBase):
     id: uuid.UUID
     created_at: datetime

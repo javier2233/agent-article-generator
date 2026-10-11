@@ -31,9 +31,35 @@ Se pueden definir en un archivo `.env` en la raíz (Compose lo lee automáticame
 | `POSTGRES_PASSWORD` | `postgres` | Contraseña de PostgreSQL |
 | `POSTGRES_DB` | `app` | Nombre de la base de datos |
 
+| `AWS_REGION` | `us-west-2` (lo aplica Strands si no se define) | Región de Amazon Bedrock |
+| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | — | Credenciales de AWS para Bedrock |
+| `AWS_SESSION_TOKEN` | — | Solo con credenciales temporales (SSO, roles asumidos) |
+| `BEDROCK_MODEL_ID` | `global.anthropic.claude-opus-5-5` | Modelo (id o perfil de inferencia) que usa el agente redactor |
+
 `DATABASE_URL` se construye en `docker-compose.yml` a partir de las anteriores; no hace falta definirla.
 
+`docker-compose.yml` pasa todo el contenido de `.env` al contenedor `app` (`env_file`, opcional: si `.env` no existe, arranca igual). Por eso las variables de AWS solo hay que ponerlas en `.env`; ver `.env.example`.
+
 > Los valores por defecto solo sirven para desarrollo local. En cualquier otro entorno, define credenciales propias.
+
+## Amazon Bedrock
+
+`POST /articles/generate` necesita acceso a Bedrock. Sin credenciales, el resto de la API funciona y ese endpoint responde `502` (el log de `app` muestra `NoCredentialsError`).
+
+1. Ten una cuenta de AWS con acceso al modelo de `BEDROCK_MODEL_ID` habilitado en Bedrock, en la región de `AWS_REGION`.
+2. La identidad necesita el permiso `bedrock:InvokeModelWithResponseStream` sobre ese modelo o perfil de inferencia.
+3. Copia `.env.example` a `.env` y rellena `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` (y `AWS_SESSION_TOKEN` si son temporales).
+4. Reinicia `app` para que lea las variables: `docker compose up -d app`.
+
+Prueba:
+
+```bash
+curl -X POST localhost:8000/articles/generate \
+  -H 'Content-Type: application/json' \
+  -d '{"topic": "La historia del café"}'
+```
+
+Si falla, mira `docker compose logs app`: `AccessDeniedException` (permisos o modelo no habilitado), `ValidationException` (id de modelo no válido en esa región).
 
 ## Flujo de trabajo
 

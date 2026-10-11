@@ -2,7 +2,7 @@
 
 ## Visión general
 
-La aplicación son dos contenedores orquestados con Docker Compose:
+La aplicación son dos contenedores orquestados con Docker Compose. Para generar artículos, `app` llama a un modelo de Amazon Bedrock mediante un agente de Strands:
 
 ```mermaid
 flowchart LR
@@ -11,6 +11,7 @@ flowchart LR
         app["app<br/>FastAPI + Uvicorn<br/>Python 3.13"] -->|psycopg 3<br/>:5432| db[("db<br/>PostgreSQL 17")]
         db --- vol[(volumen<br/>postgres_data)]
     end
+    app -->|Strands + boto3<br/>HTTPS| bedrock["Amazon Bedrock<br/>Claude"]
 ```
 
 | Servicio | Imagen | Puerto | Función |
@@ -23,6 +24,7 @@ flowchart LR
 ```
 main.py     →  Punto de entrada: crea la app y registra los routers
 api/        →  Capa HTTP: un router por recurso, validación de entrada/salida
+agents/     →  Agentes de IA (Strands): generan contenido llamando a Bedrock
 models.py   →  Capa de datos: modelos SQLModel (tabla + esquemas Pydantic)
 db.py       →  Acceso a datos: engine de SQLAlchemy y sesión por petición
 migrations/ →  Evolución del esquema con Alembic
@@ -35,10 +37,19 @@ migrations/ →  Evolución del esquema con Alembic
   |---|---|---|
   | `api/deps.py` | — | `SessionDep`: la sesión de base de datos como dependencia de FastAPI |
   | `api/health.py` | — | `GET /health` |
-  | `api/articles.py` | `/articles` | CRUD de artículos |
+  | `api/articles.py` | `/articles` | CRUD de artículos y `POST /articles/generate` |
   | `api/sections.py` | `/sections` | CRUD de secciones y `GET /sections/{id}/articles` |
 
   Cada endpoint recibe una `Session` mediante `SessionDep`.
+- **`agents/`** contiene los agentes de [Strands Agents](https://strandsagents.com/), un archivo por agente:
+
+  | Archivo | Función pública | Contenido |
+  |---|---|---|
+  | `agents/writer.py` | `generate_article(topic, section_title=None)` | Agente redactor: devuelve un `GeneratedArticle` (`title`, `content` en Markdown) |
+
+  Cada llamada crea un `Agent` nuevo (el agente guarda el historial de la conversación, así que no se comparte entre peticiones) con un `BedrockModel`. La salida se obtiene con `structured_output_model`: Strands expone el modelo Pydantic como una herramienta y valida lo que devuelve el modelo. Los agentes no tocan la base de datos: el endpoint guarda el resultado.
+
+  Si el modelo responde sin usar esa herramienta, Strands reintenta forzándola (`tool_choice`), pero Claude Opus 5.5 rechaza el uso forzado de herramientas y la petición acaba en `502`. Por eso el prompt de sistema pide usar siempre la herramienta de salida estructurada.
 - **`models.py`** define cada entidad con SQLModel. Un mismo modelo es a la vez tabla de la base de datos y esquema de validación de Pydantic.
 - **`db.py`** crea el `engine` a partir de `DATABASE_URL` (con `pool_pre_ping` para descartar conexiones caídas) y expone `get_session()`, que abre una sesión por petición y la cierra al terminar.
 - **`migrations/`** contiene la configuración de Alembic. `env.py` importa `models` para registrar las tablas y reutiliza el `engine` de `db.py`.
@@ -51,6 +62,15 @@ migrations/ →  Evolución del esquema con Alembic
 4. El endpoint lee o escribe con la sesión (`session.get`, `session.exec(select(...))`, `session.add` + `commit`).
 5. FastAPI serializa la respuesta con el `response_model` (p. ej. `ArticleRead`).
 6. Al terminar la petición, la sesión se cierra.
+
+### Generación de un artículo (`POST /articles/generate`)
+
+1. FastAPI valida el cuerpo con `ArticleGenerate` y, si hay `section_id`, el endpoint comprueba que la sección existe.
+2. El endpoint llama a `generate_article()` (`agents/writer.py`), que crea el agente y llama a Bedrock (Converse API, en streaming). La petición HTTP queda abierta hasta que el modelo termina.
+3. Con el `GeneratedArticle` devuelto, el endpoint crea el `Article` y lo guarda como en `POST /articles`.
+4. Si falla la llamada al modelo (credenciales, permisos, región, cuota…), responde `502` y el error completo queda en los logs de `app`.
+
+FastAPI ejecuta los endpoints síncronos en un pool de hilos, así que una generación en curso no bloquea el resto de peticiones.
 
 ## Arranque
 

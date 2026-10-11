@@ -4,13 +4,14 @@ Guía para agentes de IA (y personas) que trabajan en este repositorio. La docum
 
 ## Proyecto
 
-**agent-article-generator**: API REST en Python para gestionar artículos, respaldada por PostgreSQL. Todo se ejecuta con Docker Compose.
+**agent-article-generator**: API REST en Python para gestionar artículos, respaldada por PostgreSQL, que genera artículos con un agente de IA ([Strands Agents](https://strandsagents.com/) sobre Amazon Bedrock). Todo se ejecuta con Docker Compose.
 
 ## Stack
 
 - Python 3.13 · FastAPI · Uvicorn
 - SQLModel (sobre SQLAlchemy 2) · Alembic
 - PostgreSQL 17 · psycopg 3
+- Strands Agents · Amazon Bedrock (Claude)
 - Docker · Docker Compose
 
 Detalle y versiones en [docs/tech-stack.md](docs/tech-stack.md).
@@ -24,6 +25,8 @@ api/                 # Endpoints: un router por recurso
   health.py          #   /health
   articles.py        #   /articles
   sections.py        #   /sections
+agents/              # Agentes de Strands: un archivo por agente
+  writer.py          #   Agente redactor (generate_article)
 db.py                # Engine y sesión de base de datos
 models.py            # Modelos SQLModel (tablas y esquemas de la API)
 migrations/          # Alembic: env.py, plantilla y versions/
@@ -47,9 +50,10 @@ docker compose down -v                                      # Parar y borrar dat
 - **Modelos**: cada entidad tiene un `XBase` con los campos comunes, la tabla `X(XBase, table=True)` y los esquemas `XCreate` / `XRead` / `XUpdate` para la API. En `XUpdate` todos los campos son opcionales y los que no admiten nulo en la tabla rechazan `null` con un `field_validator`. Ver `models.py`.
 - **Endpoints**: van en `api/`, un archivo por recurso con su `APIRouter(prefix="/recurso", tags=["recurso"])`. Para un recurso nuevo, crea `api/<recurso>.py` y regístralo en `main.py` con `app.include_router(...)`. `main.py` no contiene endpoints.
 - **Sesión**: los endpoints reciben la sesión con `SessionDep` (de `api/deps.py`). No crear sesiones a mano en los endpoints.
+- **Agentes**: van en `agents/`, un archivo por agente, con una función pública que los endpoints llaman (p. ej. `generate_article`). Se crea un `Agent` por petición (guarda historial). La salida se pide estructurada con `structured_output_model` y un modelo Pydantic. El modelo se configura con `BEDROCK_MODEL_ID`; los endpoints no crean modelos ni agentes.
 - **Fechas**: siempre con zona horaria (UTC) y columnas `DateTime(timezone=True)`.
 - **Esquema de BD**: nunca usar `SQLModel.metadata.create_all()`. Todo cambio de esquema pasa por una migración de Alembic. Revisa siempre el archivo autogenerado antes de aplicarlo.
-- **Configuración**: por variables de entorno (`DATABASE_URL`, `POSTGRES_*`). La URL debe empezar por `postgresql+psycopg://`.
+- **Configuración**: por variables de entorno (`DATABASE_URL`, `POSTGRES_*`, `AWS_*`, `BEDROCK_MODEL_ID`). La URL debe empezar por `postgresql+psycopg://`. Las credenciales de AWS van en `.env`, nunca en el código ni en `docker-compose.yml`.
 - **Dependencias**: añadirlas a `requirements.txt` y reconstruir la imagen (`docker compose up --build`).
 
 ## Documentación obligatoria

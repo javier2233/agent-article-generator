@@ -13,6 +13,7 @@ La documentación interactiva se genera automáticamente:
 |---|---|---|---|
 | `GET` | `/health` | Comprueba que la API y la base de datos responden | `200` |
 | `POST` | `/articles` | Crea un artículo | `201` · `ArticleRead` |
+| `POST` | `/articles/generate` | Genera un artículo con IA a partir de un tema y lo guarda | `201` · `ArticleRead`, `422` o `502` |
 | `GET` | `/articles` | Lista artículos (paginado) | `200` · `ArticleRead[]` |
 | `GET` | `/articles/{article_id}` | Obtiene un artículo por id | `200` · `ArticleRead`, o `404` |
 | `PATCH` | `/articles/{article_id}` | Modifica un artículo | `200` · `ArticleRead`, o `404` |
@@ -55,6 +56,28 @@ curl -X POST localhost:8000/articles \
 ```
 
 Si el cuerpo no es válido, FastAPI responde `422` con el detalle del error.
+
+### `POST /articles/generate`
+
+Genera el título y el contenido (Markdown) con el agente redactor (Strands + Amazon Bedrock), guarda el artículo y lo devuelve. Tarda lo que tarde el modelo: puede ser más de un minuto.
+
+Cuerpo (`ArticleGenerate`):
+
+| Campo | Tipo | Obligatorio | Restricciones |
+|---|---|---|---|
+| `topic` | string | Sí | Entre 1 y 1000 caracteres. Tema o indicaciones para el artículo |
+| `section_id` | UUID | No | Sección donde se guarda; su título se pasa al agente como contexto. Si no existe: `422` con `{"detail": "Section not found"}` |
+
+```bash
+curl -X POST localhost:8000/articles/generate \
+  -H 'Content-Type: application/json' \
+  -d '{"topic": "La historia del café", "section_id": "15345934-bb22-4197-8a2a-9b618a6ebe4b"}'
+```
+```json
+{"title": "De Etiopía a tu taza: breve historia del café", "content": "## Orígenes\n...", "section_id": "15345934-bb22-4197-8a2a-9b618a6ebe4b", "id": "0b8f6c2e-3a51-4f7e-9c1d-2a4e5f6b7c8d", "created_at": "2026-10-10T18:00:00Z"}
+```
+
+Si la llamada al modelo falla (sin credenciales de AWS, sin permisos, modelo no disponible…): `502` con `{"detail": "Article generation failed"}`. El detalle está en los logs de `app`. Configuración en [development.md](development.md#amazon-bedrock).
 
 ### `GET /articles`
 
