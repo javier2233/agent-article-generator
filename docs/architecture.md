@@ -12,6 +12,7 @@ flowchart LR
         db --- vol[(volumen<br/>postgres_data)]
     end
     app -->|Strands + boto3<br/>HTTPS| bedrock["Amazon Bedrock<br/>Claude"]
+    app -->|tool web_search<br/>HTTPS| tavily["Tavily<br/>búsqueda web"]
 ```
 
 | Servicio | Imagen | Puerto | Función |
@@ -25,6 +26,7 @@ flowchart LR
 main.py     →  Punto de entrada: crea la app y registra los routers
 api/        →  Capa HTTP: un router por recurso, validación de entrada/salida
 agents/     →  Agentes de IA (Strands): generan contenido llamando a Bedrock
+agents/tools/ → Tools que los agentes pueden llamar (búsqueda web…)
 models.py   →  Capa de datos: modelos SQLModel (tabla + esquemas Pydantic)
 db.py       →  Acceso a datos: engine de SQLAlchemy y sesión por petición
 migrations/ →  Evolución del esquema con Alembic
@@ -47,6 +49,14 @@ migrations/ →  Evolución del esquema con Alembic
   |---|---|---|
   | `agents/writer.py` | `generate_article(topic, section_title=None)` | Agente redactor: devuelve un `GeneratedArticle` (`title`, `content` en Markdown) |
 
+  Las tools están en `agents/tools/`, un archivo por tool:
+
+  | Archivo | Tool | Contenido |
+  |---|---|---|
+  | `agents/tools/web_search.py` | `web_search(query, topic, time_range, max_results)` | Busca en internet con [Tavily](https://tavily.com/). Devuelve título, URL, fecha y un extracto de hasta 1500 caracteres por resultado (máximo 10 resultados) |
+
+  Una tool es una función con el decorador `@tool` de Strands: el docstring y los type hints se convierten en la descripción y el esquema que ve el modelo. Si una tool lanza una excepción, Strands se la devuelve al modelo como error y el agente sigue. El agente redactor recibe `tools=[web_search]` y su prompt de sistema le pide documentarse con ella antes de escribir.
+
   Cada llamada crea un `Agent` nuevo (el agente guarda el historial de la conversación, así que no se comparte entre peticiones) con un `BedrockModel`. La salida se obtiene con `structured_output_model`: Strands expone el modelo Pydantic como una herramienta y valida lo que devuelve el modelo. Los agentes no tocan la base de datos: el endpoint guarda el resultado.
 
   Si el modelo responde sin usar esa herramienta, Strands reintenta forzándola (`tool_choice`), pero Claude Opus 5.5 rechaza el uso forzado de herramientas y la petición acaba en `502`. Por eso el prompt de sistema pide usar siempre la herramienta de salida estructurada.
@@ -66,7 +76,7 @@ migrations/ →  Evolución del esquema con Alembic
 ### Generación de un artículo (`POST /articles/generate`)
 
 1. FastAPI valida el cuerpo con `ArticleGenerate` y, si hay `section_id`, el endpoint comprueba que la sección existe.
-2. El endpoint llama a `generate_article()` (`agents/writer.py`), que crea el agente y llama a Bedrock (Converse API, en streaming). La petición HTTP queda abierta hasta que el modelo termina.
+2. El endpoint llama a `generate_article()` (`agents/writer.py`), que crea el agente y llama a Bedrock (Converse API, en streaming). El modelo hace una o varias búsquedas con `web_search` (cada una es otra vuelta del bucle del agente: Bedrock → Tavily → Bedrock) y luego redacta. La petición HTTP queda abierta hasta que el modelo termina.
 3. Con el `GeneratedArticle` devuelto, el endpoint crea el `Article` y lo guarda como en `POST /articles`.
 4. Si falla la llamada al modelo (credenciales, permisos, región, cuota…), responde `502` y el error completo queda en los logs de `app`.
 

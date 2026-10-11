@@ -34,6 +34,7 @@ Se pueden definir en un archivo `.env` en la raíz (Compose lo lee automáticame
 | `AWS_REGION` | `us-west-2` (lo aplica Strands si no se define) | Región de Amazon Bedrock |
 | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | — | Credenciales de AWS para Bedrock |
 | `AWS_SESSION_TOKEN` | — | Solo con credenciales temporales (SSO, roles asumidos) |
+| `TAVILY_API_KEY` | — | Clave de la API de Tavily para la tool `web_search` (gratuita en [app.tavily.com](https://app.tavily.com)) |
 | `BEDROCK_MODEL_ID` | `global.anthropic.claude-opus-5-5` | Modelo (id o perfil de inferencia) que usa el agente redactor |
 
 `DATABASE_URL` se construye en `docker-compose.yml` a partir de las anteriores; no hace falta definirla.
@@ -60,6 +61,16 @@ curl -X POST localhost:8000/articles/generate \
 ```
 
 Si falla, mira `docker compose logs app`: `AccessDeniedException` (permisos o modelo no habilitado), `ValidationException` (id de modelo no válido en esa región).
+
+## Tavily
+
+La tool `web_search` usa `TAVILY_API_KEY` de `.env`. Sin clave, el SDK de Tavily funciona en modo sin clave con un límite de uso bajo: sirve para probar, no para uso continuado. Si la búsqueda falla (límite, clave no válida), el agente recibe el error y escribe sin documentarse.
+
+Probar la tool sin pasar por el agente:
+
+```bash
+docker compose exec app python -c "from agents.tools.web_search import web_search; print(web_search(query='historia del café', max_results=2))"
+```
 
 ## Flujo de trabajo
 

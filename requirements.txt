@@ -4,3 +4,4 @@ psycopg[binary]
 sqlmodel
 alembic
 strands-agents
+tavily-python

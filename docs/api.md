@@ -59,7 +59,7 @@ Si el cuerpo no es válido, FastAPI responde `422` con el detalle del error.
 
 ### `POST /articles/generate`
 
-Genera el título y el contenido (Markdown) con el agente redactor (Strands + Amazon Bedrock), guarda el artículo y lo devuelve. Tarda lo que tarde el modelo: puede ser más de un minuto.
+Genera el título y el contenido (Markdown) con el agente redactor (Strands + Amazon Bedrock), que antes se documenta buscando en internet (tool `web_search`, con Tavily). Guarda el artículo y lo devuelve. Tarda lo que tarde el modelo: puede ser más de un minuto.
 
 Cuerpo (`ArticleGenerate`):
 

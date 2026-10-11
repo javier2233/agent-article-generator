@@ -27,6 +27,8 @@ api/                 # Endpoints: un router por recurso
   sections.py        #   /sections
 agents/              # Agentes de Strands: un archivo por agente
   writer.py          #   Agente redactor (generate_article)
+  tools/             #   Tools de los agentes: un archivo por tool
+    web_search.py    #     Búsqueda web con Tavily
 db.py                # Engine y sesión de base de datos
 models.py            # Modelos SQLModel (tablas y esquemas de la API)
 migrations/          # Alembic: env.py, plantilla y versions/
@@ -51,9 +53,10 @@ docker compose down -v                                      # Parar y borrar dat
 - **Endpoints**: van en `api/`, un archivo por recurso con su `APIRouter(prefix="/recurso", tags=["recurso"])`. Para un recurso nuevo, crea `api/<recurso>.py` y regístralo en `main.py` con `app.include_router(...)`. `main.py` no contiene endpoints.
 - **Sesión**: los endpoints reciben la sesión con `SessionDep` (de `api/deps.py`). No crear sesiones a mano en los endpoints.
 - **Agentes**: van en `agents/`, un archivo por agente, con una función pública que los endpoints llaman (p. ej. `generate_article`). Se crea un `Agent` por petición (guarda historial). La salida se pide estructurada con `structured_output_model` y un modelo Pydantic. El modelo se configura con `BEDROCK_MODEL_ID`; los endpoints no crean modelos ni agentes.
+- **Tools**: van en `agents/tools/`, un archivo por tool, como funciones con `@tool` de Strands. El docstring y los type hints son lo que ve el modelo (descripción y esquema): escríbelos para el modelo, con `Args:` por parámetro. Devuelven solo lo necesario (recortado) para no llenar el contexto. El prompt de sistema del agente debe decir cuándo usar cada tool.
 - **Fechas**: siempre con zona horaria (UTC) y columnas `DateTime(timezone=True)`.
 - **Esquema de BD**: nunca usar `SQLModel.metadata.create_all()`. Todo cambio de esquema pasa por una migración de Alembic. Revisa siempre el archivo autogenerado antes de aplicarlo.
-- **Configuración**: por variables de entorno (`DATABASE_URL`, `POSTGRES_*`, `AWS_*`, `BEDROCK_MODEL_ID`). La URL debe empezar por `postgresql+psycopg://`. Las credenciales de AWS van en `.env`, nunca en el código ni en `docker-compose.yml`.
+- **Configuración**: por variables de entorno (`DATABASE_URL`, `POSTGRES_*`, `AWS_*`, `BEDROCK_MODEL_ID`, `TAVILY_API_KEY`). La URL debe empezar por `postgresql+psycopg://`. Las credenciales de AWS y las claves de API van en `.env`, nunca en el código ni en `docker-compose.yml`.
 - **Dependencias**: añadirlas a `requirements.txt` y reconstruir la imagen (`docker compose up --build`).
 
 ## Documentación obligatoria
