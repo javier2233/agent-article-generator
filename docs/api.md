@@ -15,6 +15,16 @@ La documentación interactiva se genera automáticamente:
 | `POST` | `/articles` | Crea un artículo | `201` · `ArticleRead` |
 | `GET` | `/articles` | Lista artículos (paginado) | `200` · `ArticleRead[]` |
 | `GET` | `/articles/{article_id}` | Obtiene un artículo por id | `200` · `ArticleRead`, o `404` |
+| `PATCH` | `/articles/{article_id}` | Modifica un artículo | `200` · `ArticleRead`, o `404` |
+| `DELETE` | `/articles/{article_id}` | Borra un artículo | `204`, o `404` |
+| `POST` | `/sections` | Crea una sección | `201` · `SectionRead` |
+| `GET` | `/sections` | Lista secciones (paginado) | `200` · `SectionRead[]` |
+| `GET` | `/sections/{section_id}` | Obtiene una sección por id | `200` · `SectionRead`, o `404` |
+| `PATCH` | `/sections/{section_id}` | Modifica una sección | `200` · `SectionRead`, o `404` |
+| `DELETE` | `/sections/{section_id}` | Borra una sección | `204`, o `404` |
+| `GET` | `/sections/{section_id}/articles` | Lista los artículos de una sección (paginado) | `200` · `ArticleRead[]`, o `404` |
+
+Todos los ids son UUID. Un id con formato no válido responde `422`. Los listados aceptan `offset` (por defecto `0`) y `limit` (por defecto `100`).
 
 ### `GET /health`
 
@@ -33,14 +43,15 @@ Cuerpo (`ArticleCreate`):
 |---|---|---|---|
 | `title` | string | Sí | Máximo 255 caracteres |
 | `content` | string | Sí | |
+| `section_id` | UUID | No | Debe ser el id de una sección existente; si no existe, responde `422` con `{"detail": "Section not found"}` |
 
 ```bash
 curl -X POST localhost:8000/articles \
   -H 'Content-Type: application/json' \
-  -d '{"title": "Hola", "content": "Primer artículo"}'
+  -d '{"title": "Hola", "content": "Primer artículo", "section_id": "65f10685-1c23-4f41-b634-ecacb1d76e7a"}'
 ```
 ```json
-{"title": "Hola", "content": "Primer artículo", "id": 1, "created_at": "2026-10-10T18:00:00Z"}
+{"title": "Hola", "content": "Primer artículo", "section_id": "65f10685-1c23-4f41-b634-ecacb1d76e7a", "id": "60c503dc-7656-45e1-b1dc-404f6586d562", "created_at": "2026-10-10T18:00:00Z"}
 ```
 
 Si el cuerpo no es válido, FastAPI responde `422` con el detalle del error.
@@ -61,7 +72,100 @@ curl 'localhost:8000/articles?offset=0&limit=10'
 ### `GET /articles/{article_id}`
 
 ```bash
-curl localhost:8000/articles/1
+curl localhost:8000/articles/60c503dc-7656-45e1-b1dc-404f6586d562
 ```
 
-Si no existe: `404` con `{"detail": "Article not found"}`.
+Si no existe: `404` con `{"detail": "Article not found"}`. Si el id no es un UUID válido: `422`.
+
+### `PATCH /articles/{article_id}`
+
+Cuerpo (`ArticleUpdate`): solo se modifican los campos enviados. Un cuerpo vacío (`{}`) no cambia nada.
+
+| Campo | Tipo | Obligatorio | Restricciones |
+|---|---|---|---|
+| `title` | string | No | Máximo 255 caracteres. No admite `null` (`422`) |
+| `content` | string | No | No admite `null` (`422`) |
+| `section_id` | UUID o `null` | No | Debe ser una sección existente (`422` si no). `null` quita el artículo de su sección |
+
+```bash
+# Mover el artículo a otra sección
+curl -X PATCH localhost:8000/articles/60c503dc-7656-45e1-b1dc-404f6586d562 \
+  -H 'Content-Type: application/json' \
+  -d '{"section_id": "15345934-bb22-4197-8a2a-9b618a6ebe4b"}'
+
+# Quitarlo de su sección
+curl -X PATCH localhost:8000/articles/60c503dc-7656-45e1-b1dc-404f6586d562 \
+  -H 'Content-Type: application/json' \
+  -d '{"section_id": null}'
+```
+
+Si el artículo no existe: `404`.
+
+### `DELETE /articles/{article_id}`
+
+```bash
+curl -X DELETE localhost:8000/articles/60c503dc-7656-45e1-b1dc-404f6586d562
+```
+
+Responde `204` sin cuerpo. Si no existe: `404`.
+
+### `POST /sections`
+
+Cuerpo (`SectionCreate`):
+
+| Campo | Tipo | Obligatorio | Restricciones |
+|---|---|---|---|
+| `title` | string | Sí | Máximo 255 caracteres |
+
+```bash
+curl -X POST localhost:8000/sections \
+  -H 'Content-Type: application/json' \
+  -d '{"title": "Tecnología"}'
+```
+```json
+{"title": "Tecnología", "id": "15345934-bb22-4197-8a2a-9b618a6ebe4b"}
+```
+
+### `GET /sections`
+
+```bash
+curl 'localhost:8000/sections?offset=0&limit=10'
+```
+
+### `GET /sections/{section_id}`
+
+```bash
+curl localhost:8000/sections/15345934-bb22-4197-8a2a-9b618a6ebe4b
+```
+
+Si no existe: `404` con `{"detail": "Section not found"}`.
+
+### `PATCH /sections/{section_id}`
+
+Cuerpo (`SectionUpdate`): solo se modifican los campos enviados. Un cuerpo vacío (`{}`) no cambia nada.
+
+| Campo | Tipo | Obligatorio | Restricciones |
+|---|---|---|---|
+| `title` | string | No | Máximo 255 caracteres. No admite `null` (`422`) |
+
+```bash
+curl -X PATCH localhost:8000/sections/15345934-bb22-4197-8a2a-9b618a6ebe4b \
+  -H 'Content-Type: application/json' \
+  -d '{"title": "Tech"}'
+```
+
+### `DELETE /sections/{section_id}`
+
+```bash
+curl -X DELETE localhost:8000/sections/15345934-bb22-4197-8a2a-9b618a6ebe4b
+```
+
+Responde `204` sin cuerpo. Los artículos de la sección **no se borran**: quedan con `section_id: null`.
+
+### `GET /sections/{section_id}/articles`
+
+```bash
+curl localhost:8000/sections/15345934-bb22-4197-8a2a-9b618a6ebe4b/articles
+```
+
+Devuelve los artículos cuyo `section_id` es esta sección. Si la sección no existe: `404`.

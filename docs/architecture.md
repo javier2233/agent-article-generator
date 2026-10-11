@@ -21,20 +21,31 @@ flowchart LR
 ## Capas de la aplicación
 
 ```
-main.py     →  Capa HTTP: rutas FastAPI, validación de entrada/salida
+main.py     →  Punto de entrada: crea la app y registra los routers
+api/        →  Capa HTTP: un router por recurso, validación de entrada/salida
 models.py   →  Capa de datos: modelos SQLModel (tabla + esquemas Pydantic)
 db.py       →  Acceso a datos: engine de SQLAlchemy y sesión por petición
 migrations/ →  Evolución del esquema con Alembic
 ```
 
-- **`main.py`** define la app FastAPI y los endpoints. Cada endpoint recibe una `Session` mediante la dependencia `SessionDep`.
+- **`main.py`** crea la app FastAPI y registra los routers con `app.include_router()`. No contiene endpoints.
+- **`api/`** contiene los endpoints, un archivo por recurso. Cada uno define un `APIRouter` con su prefijo de URL y su etiqueta (`tags`), que agrupa sus endpoints en `/docs`:
+
+  | Archivo | Prefijo | Contenido |
+  |---|---|---|
+  | `api/deps.py` | — | `SessionDep`: la sesión de base de datos como dependencia de FastAPI |
+  | `api/health.py` | — | `GET /health` |
+  | `api/articles.py` | `/articles` | CRUD de artículos |
+  | `api/sections.py` | `/sections` | CRUD de secciones y `GET /sections/{id}/articles` |
+
+  Cada endpoint recibe una `Session` mediante `SessionDep`.
 - **`models.py`** define cada entidad con SQLModel. Un mismo modelo es a la vez tabla de la base de datos y esquema de validación de Pydantic.
 - **`db.py`** crea el `engine` a partir de `DATABASE_URL` (con `pool_pre_ping` para descartar conexiones caídas) y expone `get_session()`, que abre una sesión por petición y la cierra al terminar.
 - **`migrations/`** contiene la configuración de Alembic. `env.py` importa `models` para registrar las tablas y reutiliza el `engine` de `db.py`.
 
 ## Flujo de una petición
 
-1. Uvicorn recibe la petición HTTP y la pasa a FastAPI.
+1. Uvicorn recibe la petición HTTP y la pasa a FastAPI, que la dirige al endpoint del router correspondiente en `api/`.
 2. FastAPI valida el cuerpo con el esquema correspondiente (p. ej. `ArticleCreate`).
 3. FastAPI resuelve `SessionDep` llamando a `get_session()`, que abre una sesión.
 4. El endpoint lee o escribe con la sesión (`session.get`, `session.exec(select(...))`, `session.add` + `commit`).
