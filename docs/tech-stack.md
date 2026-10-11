@@ -22,7 +22,7 @@ Versiones que resolvió `pip` a fecha de 2026-10-10, como referencia.
 | [**Alembic**](https://alembic.sqlalchemy.org/) | 1.20.0 | Migraciones del esquema de la base de datos. |
 | [**Strands Agents**](https://strandsagents.com/) (`strands-agents`) | 1.59.0 | SDK de agentes de IA (de AWS). Define los agentes de `agents/`, ejecuta su bucle y obtiene salida estructurada con modelos Pydantic. |
 | [**boto3**](https://boto3.amazonaws.com/v1/documentation/api/latest/index.html) | 1.43.111 | SDK de AWS (lo instala Strands). Cliente de `bedrock-runtime` y resolución de credenciales. |
-| [**tavily-python**](https://docs.tavily.com/) | 0.8.5 | Cliente de la API de búsqueda de Tavily. Lo usa la tool `web_search`. |
+| [**tavily-python**](https://docs.tavily.com/) | 0.8.5 | Cliente de la API de búsqueda de Tavily. Lo usan las tools `web_search` y `soccer_stats_search`. |
 | [**psycopg**](https://www.psycopg.org/psycopg3/) (`[binary]`) | 3.3.6 | Driver de PostgreSQL (versión 3). El extra `binary` trae libpq precompilada, así que no hace falta compilar nada en la imagen. |
 
 ## Base de datos
@@ -35,13 +35,14 @@ Versiones que resolvió `pip` a fecha de 2026-10-10, como referencia.
 
 | Tecnología | Modelo | Uso |
 |---|---|---|
-| **Amazon Bedrock** | Claude Opus 5.5 (`global.anthropic.claude-opus-5-5`, configurable con `BEDROCK_MODEL_ID`) | Modelo que usa el agente redactor. Se accede con la Converse API de `bedrock-runtime`. |
+| **Amazon Bedrock** | Claude Opus 5.5 (`global.anthropic.claude-opus-5-5`, configurable con `BEDROCK_MODEL_ID`) | Modelo que usa soccerAgent. Se accede con la Converse API de `bedrock-runtime`. |
 
 ## Servicios externos
 
 | Servicio | Uso |
 |---|---|
-| **Tavily** | API de búsqueda web pensada para agentes de IA: devuelve el contenido limpio de cada resultado. La usa la tool `web_search`. |
+| **Tavily** | API de búsqueda web pensada para agentes de IA: devuelve el contenido limpio de cada resultado. La usan las tools `web_search` y `soccer_stats_search`. |
+| **SofaScore** y **FootyStats** | Webs de estadísticas de fútbol. No se usan sus APIs: `soccer_stats_search` busca en ellas a través de Tavily. |
 
 ## Infraestructura
 

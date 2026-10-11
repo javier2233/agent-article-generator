@@ -4,12 +4,12 @@ import uuid
 from fastapi import APIRouter, HTTPException
 from sqlmodel import select
 
-from agents.writer import generate_article
+from agents.soccer_agent import generate_match_prediction
 from api.deps import SessionDep
 from models import (
     Article,
     ArticleCreate,
-    ArticleGenerate,
+    ArticlePredictionCreate,
     ArticleRead,
     ArticleUpdate,
     Section,
@@ -31,20 +31,25 @@ def create_article(article: ArticleCreate, session: SessionDep):
     return db_article
 
 
-@router.post("/generate", response_model=ArticleRead, status_code=201)
-def generate(request: ArticleGenerate, session: SessionDep):
+@router.post("/predictions", response_model=ArticleRead, status_code=201)
+def create_prediction(prediction: ArticlePredictionCreate, session: SessionDep):
     section = None
-    if request.section_id:
-        section = session.get(Section, request.section_id)
+    if prediction.section_id:
+        section = session.get(Section, prediction.section_id)
         if not section:
             raise HTTPException(status_code=422, detail="Section not found")
     try:
-        generated = generate_article(request.topic, section.title if section else None)
+        generated = generate_match_prediction(
+            prediction.home_team,
+            prediction.away_team,
+            prediction.competition,
+            section.title if section else None,
+        )
     except Exception:
         logger.exception("Article generation failed")
         raise HTTPException(status_code=502, detail="Article generation failed")
     db_article = Article(
-        title=generated.title, content=generated.content, section_id=request.section_id
+        title=generated.title, content=generated.content, section_id=prediction.section_id
     )
     session.add(db_article)
     session.commit()

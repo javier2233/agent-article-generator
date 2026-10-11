@@ -58,8 +58,10 @@ class ArticleCreate(ArticleBase):
     pass
 
 
-class ArticleGenerate(SQLModel):
-    topic: str = Field(min_length=1, max_length=1000)
+class ArticlePredictionCreate(SQLModel):
+    home_team: str = Field(min_length=1, max_length=100)
+    away_team: str = Field(min_length=1, max_length=100)
+    competition: str | None = Field(default=None, max_length=100)
     section_id: uuid.UUID | None = None
 
 

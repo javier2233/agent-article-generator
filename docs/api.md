@@ -13,7 +13,7 @@ La documentación interactiva se genera automáticamente:
 |---|---|---|---|
 | `GET` | `/health` | Comprueba que la API y la base de datos responden | `200` |
 | `POST` | `/articles` | Crea un artículo | `201` · `ArticleRead` |
-| `POST` | `/articles/generate` | Genera un artículo con IA a partir de un tema y lo guarda | `201` · `ArticleRead`, `422` o `502` |
+| `POST` | `/articles/predictions` | Genera con IA la previa con predicción de un partido de fútbol y la guarda | `201` · `ArticleRead`, `422` o `502` |
 | `GET` | `/articles` | Lista artículos (paginado) | `200` · `ArticleRead[]` |
 | `GET` | `/articles/{article_id}` | Obtiene un artículo por id | `200` · `ArticleRead`, o `404` |
 | `PATCH` | `/articles/{article_id}` | Modifica un artículo | `200` · `ArticleRead`, o `404` |
@@ -57,24 +57,28 @@ curl -X POST localhost:8000/articles \
 
 Si el cuerpo no es válido, FastAPI responde `422` con el detalle del error.
 
-### `POST /articles/generate`
+### `POST /articles/predictions`
 
-Genera el título y el contenido (Markdown) con el agente redactor (Strands + Amazon Bedrock), que antes se documenta buscando en internet (tool `web_search`, con Tavily). Guarda el artículo y lo devuelve. Tarda lo que tarde el modelo: puede ser más de un minuto.
+Genera con soccerAgent (Strands + Amazon Bedrock) un artículo de previa del próximo partido entre dos equipos, con una predicción razonada del resultado. El agente se documenta antes con Tavily: estadísticas en SofaScore y FootyStats (tool `soccer_stats_search`: forma reciente, enfrentamientos directos, clasificación, xG) y actualidad en el resto de internet (tool `web_search`: fecha y estadio, lesiones, sanciones). Guarda el artículo y lo devuelve. Tarda lo que tarde el modelo: puede ser más de un minuto.
 
-Cuerpo (`ArticleGenerate`):
+El contenido (Markdown) incluye: contexto del partido, análisis de los dos equipos, historial de enfrentamientos, predicción (probabilidades de victoria local, empate y victoria visitante, marcador más probable y factores clave) y una nota de que no es una recomendación de apuestas. Si el agente no encuentra un próximo partido entre esos equipos, lo dice en el artículo.
+
+Cuerpo (`ArticlePredictionCreate`):
 
 | Campo | Tipo | Obligatorio | Restricciones |
 |---|---|---|---|
-| `topic` | string | Sí | Entre 1 y 1000 caracteres. Tema o indicaciones para el artículo |
+| `home_team` | string | Sí | Equipo local. Entre 1 y 100 caracteres |
+| `away_team` | string | Sí | Equipo visitante. Entre 1 y 100 caracteres |
+| `competition` | string | No | Competición (p. ej. `"LaLiga"`), útil si los equipos se enfrentan en varias. Máximo 100 caracteres |
 | `section_id` | UUID | No | Sección donde se guarda; su título se pasa al agente como contexto. Si no existe: `422` con `{"detail": "Section not found"}` |
 
 ```bash
-curl -X POST localhost:8000/articles/generate \
+curl -X POST localhost:8000/articles/predictions \
   -H 'Content-Type: application/json' \
-  -d '{"topic": "La historia del café", "section_id": "15345934-bb22-4197-8a2a-9b618a6ebe4b"}'
+  -d '{"home_team": "Real Madrid", "away_team": "FC Barcelona", "competition": "LaLiga", "section_id": "15345934-bb22-4197-8a2a-9b618a6ebe4b"}'
 ```
 ```json
-{"title": "De Etiopía a tu taza: breve historia del café", "content": "## Orígenes\n...", "section_id": "15345934-bb22-4197-8a2a-9b618a6ebe4b", "id": "0b8f6c2e-3a51-4f7e-9c1d-2a4e5f6b7c8d", "created_at": "2026-10-10T18:00:00Z"}
+{"title": "Real Madrid - Barcelona: previa y predicción del Clásico", "content": "## Contexto del partido\n...", "section_id": "15345934-bb22-4197-8a2a-9b618a6ebe4b", "id": "0b8f6c2e-3a51-4f7e-9c1d-2a4e5f6b7c8d", "created_at": "2026-10-10T18:00:00Z"}
 ```
 
 Si la llamada al modelo falla (sin credenciales de AWS, sin permisos, modelo no disponible…): `502` con `{"detail": "Article generation failed"}`. El detalle está en los logs de `app`. Configuración en [development.md](development.md#amazon-bedrock).

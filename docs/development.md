@@ -34,8 +34,8 @@ Se pueden definir en un archivo `.env` en la raíz (Compose lo lee automáticame
 | `AWS_REGION` | `us-west-2` (lo aplica Strands si no se define) | Región de Amazon Bedrock |
 | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | — | Credenciales de AWS para Bedrock |
 | `AWS_SESSION_TOKEN` | — | Solo con credenciales temporales (SSO, roles asumidos) |
-| `TAVILY_API_KEY` | — | Clave de la API de Tavily para la tool `web_search` (gratuita en [app.tavily.com](https://app.tavily.com)) |
-| `BEDROCK_MODEL_ID` | `global.anthropic.claude-opus-5-5` | Modelo (id o perfil de inferencia) que usa el agente redactor |
+| `TAVILY_API_KEY` | — | Clave de la API de Tavily para las tools `web_search` y `soccer_stats_search` (gratuita en [app.tavily.com](https://app.tavily.com)) |
+| `BEDROCK_MODEL_ID` | `global.anthropic.claude-opus-5-5` | Modelo (id o perfil de inferencia) que usa soccerAgent |
 
 `DATABASE_URL` se construye en `docker-compose.yml` a partir de las anteriores; no hace falta definirla.
 
@@ -45,7 +45,7 @@ Se pueden definir en un archivo `.env` en la raíz (Compose lo lee automáticame
 
 ## Amazon Bedrock
 
-`POST /articles/generate` necesita acceso a Bedrock. Sin credenciales, el resto de la API funciona y ese endpoint responde `502` (el log de `app` muestra `NoCredentialsError`).
+`POST /articles/predictions` necesita acceso a Bedrock. Sin credenciales, el resto de la API funciona y ese endpoint responde `502` (el log de `app` muestra `NoCredentialsError`).
 
 1. Ten una cuenta de AWS con acceso al modelo de `BEDROCK_MODEL_ID` habilitado en Bedrock, en la región de `AWS_REGION`.
 2. La identidad necesita el permiso `bedrock:InvokeModelWithResponseStream` sobre ese modelo o perfil de inferencia.
@@ -55,21 +55,22 @@ Se pueden definir en un archivo `.env` en la raíz (Compose lo lee automáticame
 Prueba:
 
 ```bash
-curl -X POST localhost:8000/articles/generate \
+curl -X POST localhost:8000/articles/predictions \
   -H 'Content-Type: application/json' \
-  -d '{"topic": "La historia del café"}'
+  -d '{"home_team": "Real Madrid", "away_team": "FC Barcelona", "competition": "LaLiga"}'
 ```
 
 Si falla, mira `docker compose logs app`: `AccessDeniedException` (permisos o modelo no habilitado), `ValidationException` (id de modelo no válido en esa región).
 
 ## Tavily
 
-La tool `web_search` usa `TAVILY_API_KEY` de `.env`. Sin clave, el SDK de Tavily funciona en modo sin clave con un límite de uso bajo: sirve para probar, no para uso continuado. Si la búsqueda falla (límite, clave no válida), el agente recibe el error y escribe sin documentarse.
+Las tools `web_search` y `soccer_stats_search` usan `TAVILY_API_KEY` de `.env`. Sin clave, el SDK de Tavily funciona en modo sin clave con un límite de uso bajo: sirve para probar, no para uso continuado. Si la búsqueda falla (límite, clave no válida), el agente recibe el error y escribe sin documentarse.
 
-Probar la tool sin pasar por el agente:
+Probar las tools sin pasar por el agente:
 
 ```bash
-docker compose exec app python -c "from agents.tools.web_search import web_search; print(web_search(query='historia del café', max_results=2))"
+docker compose exec app python -c "from agents.tools.web_search import web_search; print(web_search(query='Real Madrid lesiones', topic='news', max_results=2))"
+docker compose exec app python -c "from agents.tools.soccer_stats_search import soccer_stats_search; print(soccer_stats_search(query='Real Madrid vs FC Barcelona h2h stats', source='footystats', max_results=2))"
 ```
 
 ## Flujo de trabajo

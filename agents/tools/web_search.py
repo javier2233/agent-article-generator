@@ -1,11 +1,8 @@
-import os
 from typing import Literal
 
 from strands import tool
-from tavily import TavilyClient
 
-# Extracto máximo por resultado: suficiente para redactar sin llenar el contexto.
-MAX_CONTENT_CHARS = 1500
+from agents.tools import _tavily
 
 
 @tool
@@ -31,19 +28,4 @@ def web_search(
         Lista de resultados con título, URL, fecha de publicación (si se conoce)
         y un extracto del contenido.
     """
-    client = TavilyClient(api_key=os.environ.get("TAVILY_API_KEY"))
-    response = client.search(
-        query,
-        topic=topic,
-        time_range=time_range,
-        max_results=min(max(max_results, 1), 10),
-    )
-    return [
-        {
-            "title": result.get("title"),
-            "url": result.get("url"),
-            "published_date": result.get("published_date"),
-            "content": (result.get("content") or "")[:MAX_CONTENT_CHARS],
-        }
-        for result in response.get("results", [])
-    ]
+    return _tavily.search(query, max_results, topic=topic, time_range=time_range)

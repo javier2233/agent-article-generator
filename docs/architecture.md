@@ -12,7 +12,7 @@ flowchart LR
         db --- vol[(volumen<br/>postgres_data)]
     end
     app -->|Strands + boto3<br/>HTTPS| bedrock["Amazon Bedrock<br/>Claude"]
-    app -->|tool web_search<br/>HTTPS| tavily["Tavily<br/>búsqueda web"]
+    app -->|tools web_search y<br/>soccer_stats_search<br/>HTTPS| tavily["Tavily<br/>búsqueda web"]
 ```
 
 | Servicio | Imagen | Puerto | Función |
@@ -39,7 +39,7 @@ migrations/ →  Evolución del esquema con Alembic
   |---|---|---|
   | `api/deps.py` | — | `SessionDep`: la sesión de base de datos como dependencia de FastAPI |
   | `api/health.py` | — | `GET /health` |
-  | `api/articles.py` | `/articles` | CRUD de artículos y `POST /articles/generate` |
+  | `api/articles.py` | `/articles` | CRUD de artículos y `POST /articles/predictions` |
   | `api/sections.py` | `/sections` | CRUD de secciones y `GET /sections/{id}/articles` |
 
   Cada endpoint recibe una `Session` mediante `SessionDep`.
@@ -47,15 +47,19 @@ migrations/ →  Evolución del esquema con Alembic
 
   | Archivo | Función pública | Contenido |
   |---|---|---|
-  | `agents/writer.py` | `generate_article(topic, section_title=None)` | Agente redactor: devuelve un `GeneratedArticle` (`title`, `content` en Markdown) |
+  | `agents/soccer_agent.py` | `generate_match_prediction(home_team, away_team, competition=None, section_title=None)` | **soccerAgent**: escribe la previa del próximo partido entre dos equipos con una predicción razonada. Devuelve un `GeneratedArticle` (`title`, `content` en Markdown) |
 
   Las tools están en `agents/tools/`, un archivo por tool:
 
   | Archivo | Tool | Contenido |
   |---|---|---|
-  | `agents/tools/web_search.py` | `web_search(query, topic, time_range, max_results)` | Busca en internet con [Tavily](https://tavily.com/). Devuelve título, URL, fecha y un extracto de hasta 1500 caracteres por resultado (máximo 10 resultados) |
+  | `agents/tools/web_search.py` | `web_search(query, topic, time_range, max_results)` | Busca en todo internet con [Tavily](https://tavily.com/). Para actualidad: fecha del partido, lesiones, sanciones, declaraciones |
+  | `agents/tools/soccer_stats_search.py` | `soccer_stats_search(query, source, max_results)` | Busca con Tavily solo en [SofaScore](https://www.sofascore.com/) y [FootyStats](https://footystats.org/) (`include_domains`). `source` limita a una de las dos. Para estadísticas: forma, H2H, clasificación, xG |
+  | `agents/tools/_tavily.py` | — (helper, no es una tool) | `search()`: llama a Tavily y recorta cada resultado a título, URL, fecha y un extracto de hasta 1500 caracteres (máximo 10 resultados). Lo usan las dos tools |
 
-  Una tool es una función con el decorador `@tool` de Strands: el docstring y los type hints se convierten en la descripción y el esquema que ve el modelo. Si una tool lanza una excepción, Strands se la devuelve al modelo como error y el agente sigue. El agente redactor recibe `tools=[web_search]` y su prompt de sistema le pide documentarse con ella antes de escribir.
+  Una tool es una función con el decorador `@tool` de Strands: el docstring y los type hints se convierten en la descripción y el esquema que ve el modelo. Si una tool lanza una excepción, Strands se la devuelve al modelo como error y el agente sigue. soccerAgent recibe `tools=[soccer_stats_search, web_search]`. Su prompt de sistema le pide documentarse antes de escribir: estadísticas con `soccer_stats_search` (fuente principal) y actualidad con `web_search`. También le pide descartar resultados de otros deportes, equipos femeninos o filiales, que estas búsquedas devuelven a menudo.
+
+  El artículo de soccerAgent sigue una estructura fija que marca el prompt: contexto del partido, análisis de los dos equipos, historial, predicción (probabilidades de 1/X/2 que suman 100 %, marcador más probable y factores clave) y una nota de que no es una recomendación de apuestas. El mensaje al agente incluye la fecha de hoy para que identifique el *próximo* partido; va en el mensaje y no en el prompt de sistema para que este no cambie entre peticiones.
 
   Cada llamada crea un `Agent` nuevo (el agente guarda el historial de la conversación, así que no se comparte entre peticiones) con un `BedrockModel`. La salida se obtiene con `structured_output_model`: Strands expone el modelo Pydantic como una herramienta y valida lo que devuelve el modelo. Los agentes no tocan la base de datos: el endpoint guarda el resultado.
 
@@ -73,10 +77,10 @@ migrations/ →  Evolución del esquema con Alembic
 5. FastAPI serializa la respuesta con el `response_model` (p. ej. `ArticleRead`).
 6. Al terminar la petición, la sesión se cierra.
 
-### Generación de un artículo (`POST /articles/generate`)
+### Generación de una previa con predicción (`POST /articles/predictions`)
 
-1. FastAPI valida el cuerpo con `ArticleGenerate` y, si hay `section_id`, el endpoint comprueba que la sección existe.
-2. El endpoint llama a `generate_article()` (`agents/writer.py`), que crea el agente y llama a Bedrock (Converse API, en streaming). El modelo hace una o varias búsquedas con `web_search` (cada una es otra vuelta del bucle del agente: Bedrock → Tavily → Bedrock) y luego redacta. La petición HTTP queda abierta hasta que el modelo termina.
+1. FastAPI valida el cuerpo con `ArticlePredictionCreate` y, si hay `section_id`, el endpoint comprueba que la sección existe.
+2. El endpoint llama a `generate_match_prediction()` (`agents/soccer_agent.py`), que crea el agente y llama a Bedrock (Converse API, en streaming). El modelo hace varias búsquedas con `soccer_stats_search` y `web_search` (cada una es otra vuelta del bucle del agente: Bedrock → Tavily → Bedrock) y luego redacta. La petición HTTP queda abierta hasta que el modelo termina.
 3. Con el `GeneratedArticle` devuelto, el endpoint crea el `Article` y lo guarda como en `POST /articles`.
 4. Si falla la llamada al modelo (credenciales, permisos, región, cuota…), responde `502` y el error completo queda en los logs de `app`.
 
