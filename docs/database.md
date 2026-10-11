@@ -19,9 +19,9 @@ Los modelos están en `models.py`. Cada entidad sigue este patrón:
 | `ArticleBase` | No | Campos comunes que comparten el resto de clases |
 | `Article` | Sí | La tabla de la base de datos |
 | `ArticleCreate` | No | Cuerpo de entrada de `POST /articles` |
-| `ArticlePredictionCreate` | No | Cuerpo de entrada de `POST /articles/predictions`: `home_team`, `away_team`, y `competition` y `section_id` opcionales. No es una tabla ni cambia el esquema |
+| `ArticlePredictionCreate` | No | Cuerpo de entrada de `POST /articles/predictions`: `home_team`, `away_team`, `match_date` (fecha `YYYY-MM-DD`), y `competition` y `section_id` opcionales. No es una tabla ni cambia el esquema |
 | `ArticleRead` | No | Respuesta de la API |
-| `ArticleUpdate` | No | Cuerpo de `PATCH /articles/{id}`: todos los campos opcionales. `title` y `content` no admiten `null`; `section_id` sí (quita la sección) |
+| `ArticleUpdate` | No | Cuerpo de `PATCH /articles/{id}`: todos los campos opcionales. `title` y `content` no admiten `null`; `match_date` y `section_id` sí (quitan la fecha o la sección) |
 
 ### Tabla `article`
 
@@ -31,7 +31,9 @@ Los modelos están en `models.py`. Cada entidad sigue este patrón:
 | `title` | `VARCHAR(255)` | No | |
 | `content` | `VARCHAR` | No | Sin límite de longitud |
 | `section_id` | `UUID` | Sí | Clave foránea a `section.id`, con índice. `ON DELETE SET NULL`: si se borra la sección, el artículo queda sin sección |
+| `match_date` | `DATE` | Sí | Fecha del partido. Solo la tienen los artículos de predicción (`POST /articles/predictions`) |
 | `created_at` | `TIMESTAMP WITH TIME ZONE` | No | Se rellena en Python con la hora actual en UTC |
+| `updated_at` | `TIMESTAMP WITH TIME ZONE` | No | Hora de la última modificación (UTC). Se rellena al crear y SQLAlchemy la actualiza en cada `UPDATE` hecho con el ORM (`onupdate`); un `UPDATE` en SQL directo no la cambia |
 
 ### Tabla `section`
 
@@ -66,7 +68,7 @@ Una sección tiene muchos artículos y un artículo pertenece, como máximo, a u
 
 | Revisión | Descripción |
 |---|---|
-| `0001` | Crea la tabla `article` |
+| `0001` | Crea la tabla `article` (incluye `match_date` y `updated_at`, añadidas editando esta migración el 2026-10-11, antes de tener datos) |
 | `0002` | Crea la tabla `section` |
 | `0003` | Añade `article.section_id` (clave foránea a `section.id`, con índice) |
 
@@ -97,6 +99,7 @@ docker compose exec app alembic upgrade head --sql  # Ver el SQL sin ejecutarlo
 
 - No uses `SQLModel.metadata.create_all()`: el esquema lo gestiona solo Alembic.
 - No edites una migración que ya se haya aplicado en otro entorno. Crea una nueva.
+- Excepción: mientras no haya datos que conservar en ningún entorno, se puede editar una migración existente. Después hay que recrear la base de datos (`docker compose down -v` y `docker compose up`), porque Alembic no vuelve a ejecutar una revisión ya aplicada. Comprueba con `docker compose exec app alembic check` que los modelos y las migraciones coinciden.
 
 ## Acceso directo a PostgreSQL
 

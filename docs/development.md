@@ -57,7 +57,7 @@ Prueba:
 ```bash
 curl -X POST localhost:8000/articles/predictions \
   -H 'Content-Type: application/json' \
-  -d '{"home_team": "Real Madrid", "away_team": "FC Barcelona", "competition": "LaLiga"}'
+  -d '{"home_team": "Real Madrid", "away_team": "FC Barcelona", "match_date": "2026-10-26", "competition": "LaLiga"}'
 ```
 
 Si falla, mira `docker compose logs app`: `AccessDeniedException` (permisos o modelo no habilitado), `ValidationException` (id de modelo no válido en esa región).

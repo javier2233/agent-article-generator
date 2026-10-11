@@ -42,6 +42,7 @@ def create_prediction(prediction: ArticlePredictionCreate, session: SessionDep):
         generated = generate_match_prediction(
             prediction.home_team,
             prediction.away_team,
+            prediction.match_date,
             prediction.competition,
             section.title if section else None,
         )
@@ -49,7 +50,10 @@ def create_prediction(prediction: ArticlePredictionCreate, session: SessionDep):
         logger.exception("Article generation failed")
         raise HTTPException(status_code=502, detail="Article generation failed")
     db_article = Article(
-        title=generated.title, content=generated.content, section_id=prediction.section_id
+        title=generated.title,
+        content=generated.content,
+        match_date=prediction.match_date,
+        section_id=prediction.section_id,
     )
     session.add(db_article)
     session.commit()

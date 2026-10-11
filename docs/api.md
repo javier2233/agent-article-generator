@@ -44,6 +44,7 @@ Cuerpo (`ArticleCreate`):
 |---|---|---|---|
 | `title` | string | Sí | Máximo 255 caracteres |
 | `content` | string | Sí | |
+| `match_date` | date | No | Fecha del partido (`YYYY-MM-DD`), para artículos de predicción |
 | `section_id` | UUID | No | Debe ser el id de una sección existente; si no existe, responde `422` con `{"detail": "Section not found"}` |
 
 ```bash
@@ -52,16 +53,18 @@ curl -X POST localhost:8000/articles \
   -d '{"title": "Hola", "content": "Primer artículo", "section_id": "65f10685-1c23-4f41-b634-ecacb1d76e7a"}'
 ```
 ```json
-{"title": "Hola", "content": "Primer artículo", "section_id": "65f10685-1c23-4f41-b634-ecacb1d76e7a", "id": "60c503dc-7656-45e1-b1dc-404f6586d562", "created_at": "2026-10-10T18:00:00Z"}
+{"title": "Hola", "content": "Primer artículo", "match_date": null, "section_id": "65f10685-1c23-4f41-b634-ecacb1d76e7a", "id": "60c503dc-7656-45e1-b1dc-404f6586d562", "created_at": "2026-10-10T18:00:00Z", "updated_at": "2026-10-10T18:00:00Z"}
+
+`ArticleRead` (la respuesta de todos los endpoints de artículos) incluye `created_at` y `updated_at` (hora de la última modificación, UTC), que pone el servidor.
 ```
 
 Si el cuerpo no es válido, FastAPI responde `422` con el detalle del error.
 
 ### `POST /articles/predictions`
 
-Genera con soccerAgent (Strands + Amazon Bedrock) un artículo de previa del próximo partido entre dos equipos, con una predicción razonada del resultado. El agente se documenta antes con Tavily: estadísticas en SofaScore y FootyStats (tool `soccer_stats_search`: forma reciente, enfrentamientos directos, clasificación, xG) y actualidad en el resto de internet (tool `web_search`: fecha y estadio, lesiones, sanciones). Guarda el artículo y lo devuelve. Tarda lo que tarde el modelo: puede ser más de un minuto.
+Genera con soccerAgent (Strands + Amazon Bedrock) un artículo de previa de un partido (equipos y fecha que se envían), con una predicción razonada del resultado. El agente se documenta antes con Tavily: estadísticas en SofaScore y FootyStats (tool `soccer_stats_search`: forma reciente, enfrentamientos directos, clasificación, xG) y actualidad en el resto de internet (tool `web_search`: confirmación de fecha, hora y estadio, lesiones, sanciones). Guarda el artículo y lo devuelve. Tarda lo que tarde el modelo: puede ser más de un minuto.
 
-El contenido (Markdown) incluye: contexto del partido, análisis de los dos equipos, historial de enfrentamientos, predicción (probabilidades de victoria local, empate y victoria visitante, marcador más probable y factores clave) y una nota de que no es una recomendación de apuestas. Si el agente no encuentra un próximo partido entre esos equipos, lo dice en el artículo.
+El contenido (Markdown) incluye: contexto del partido, análisis de los dos equipos, historial de enfrentamientos, predicción (probabilidades de victoria local, empate y victoria visitante, marcador más probable y factores clave) y una nota de que no es una recomendación de apuestas. Si el agente no puede confirmar que el partido se juega en `match_date`, lo dice al principio del artículo. El artículo se guarda con `match_date`.
 
 Cuerpo (`ArticlePredictionCreate`):
 
@@ -69,16 +72,17 @@ Cuerpo (`ArticlePredictionCreate`):
 |---|---|---|---|
 | `home_team` | string | Sí | Equipo local. Entre 1 y 100 caracteres |
 | `away_team` | string | Sí | Equipo visitante. Entre 1 y 100 caracteres |
+| `match_date` | date | Sí | Fecha del partido, formato `YYYY-MM-DD`. Otro formato: `422` |
 | `competition` | string | No | Competición (p. ej. `"LaLiga"`), útil si los equipos se enfrentan en varias. Máximo 100 caracteres |
 | `section_id` | UUID | No | Sección donde se guarda; su título se pasa al agente como contexto. Si no existe: `422` con `{"detail": "Section not found"}` |
 
 ```bash
 curl -X POST localhost:8000/articles/predictions \
   -H 'Content-Type: application/json' \
-  -d '{"home_team": "Real Madrid", "away_team": "FC Barcelona", "competition": "LaLiga", "section_id": "15345934-bb22-4197-8a2a-9b618a6ebe4b"}'
+  -d '{"home_team": "Real Madrid", "away_team": "FC Barcelona", "match_date": "2026-10-26", "competition": "LaLiga", "section_id": "15345934-bb22-4197-8a2a-9b618a6ebe4b"}'
 ```
 ```json
-{"title": "Real Madrid - Barcelona: previa y predicción del Clásico", "content": "## Contexto del partido\n...", "section_id": "15345934-bb22-4197-8a2a-9b618a6ebe4b", "id": "0b8f6c2e-3a51-4f7e-9c1d-2a4e5f6b7c8d", "created_at": "2026-10-10T18:00:00Z"}
+{"title": "Real Madrid - Barcelona: previa y predicción del Clásico", "content": "## Contexto del partido\n...", "match_date": "2026-10-26", "section_id": "15345934-bb22-4197-8a2a-9b618a6ebe4b", "id": "0b8f6c2e-3a51-4f7e-9c1d-2a4e5f6b7c8d", "created_at": "2026-10-10T18:00:00Z", "updated_at": "2026-10-10T18:00:00Z"}
 ```
 
 Si la llamada al modelo falla (sin credenciales de AWS, sin permisos, modelo no disponible…): `502` con `{"detail": "Article generation failed"}`. El detalle está en los logs de `app`. Configuración en [development.md](development.md#amazon-bedrock).
@@ -112,6 +116,7 @@ Cuerpo (`ArticleUpdate`): solo se modifican los campos enviados. Un cuerpo vací
 |---|---|---|---|
 | `title` | string | No | Máximo 255 caracteres. No admite `null` (`422`) |
 | `content` | string | No | No admite `null` (`422`) |
+| `match_date` | date o `null` | No | Fecha del partido. `null` la quita |
 | `section_id` | UUID o `null` | No | Debe ser una sección existente (`422` si no). `null` quita el artículo de su sección |
 
 ```bash

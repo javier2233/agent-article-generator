@@ -47,7 +47,7 @@ migrations/ →  Evolución del esquema con Alembic
 
   | Archivo | Función pública | Contenido |
   |---|---|---|
-  | `agents/soccer_agent.py` | `generate_match_prediction(home_team, away_team, competition=None, section_title=None)` | **soccerAgent**: escribe la previa del próximo partido entre dos equipos con una predicción razonada. Devuelve un `GeneratedArticle` (`title`, `content` en Markdown) |
+  | `agents/soccer_agent.py` | `generate_match_prediction(home_team, away_team, match_date, competition=None, section_title=None)` | **soccerAgent**: escribe la previa de un partido (equipos y fecha dados) con una predicción razonada. Devuelve un `GeneratedArticle` (`title`, `content` en Markdown) |
 
   Las tools están en `agents/tools/`, un archivo por tool:
 
@@ -59,7 +59,26 @@ migrations/ →  Evolución del esquema con Alembic
 
   Una tool es una función con el decorador `@tool` de Strands: el docstring y los type hints se convierten en la descripción y el esquema que ve el modelo. Si una tool lanza una excepción, Strands se la devuelve al modelo como error y el agente sigue. soccerAgent recibe `tools=[soccer_stats_search, web_search]`. Su prompt de sistema le pide documentarse antes de escribir: estadísticas con `soccer_stats_search` (fuente principal) y actualidad con `web_search`. También le pide descartar resultados de otros deportes, equipos femeninos o filiales, que estas búsquedas devuelven a menudo.
 
-  El artículo de soccerAgent sigue una estructura fija que marca el prompt: contexto del partido, análisis de los dos equipos, historial, predicción (probabilidades de 1/X/2 que suman 100 %, marcador más probable y factores clave) y una nota de que no es una recomendación de apuestas. El mensaje al agente incluye la fecha de hoy para que identifique el *próximo* partido; va en el mensaje y no en el prompt de sistema para que este no cambie entre peticiones.
+  El artículo de soccerAgent sigue una estructura fija que marca el prompt: contexto del partido, análisis de los dos equipos, historial, predicción (probabilidades de 1/X/2 que suman 100 %, marcador más probable y factores clave) y una nota de que no es una recomendación de apuestas. 
+  El prompt de sistema es fijo y define un plan de investigación en tres pasos: (1) confirmar con `web_search` que el partido se juega en esa fecha, con hora y estadio; (2) estadísticas con `soccer_stats_search`: H2H, forma de cada equipo y clasificación; (3) actualidad de la última semana con `web_search`: lesiones, sanciones, convocatoria. Incluye consultas de ejemplo construidas con los nombres de los equipos y la fecha.
+
+  Los datos de la petición van en el mensaje al agente, dentro de un bloque `<partido>`, junto con la fecha de hoy (para juzgar si un dato es reciente). El prompt de sistema le dice que esos datos son la referencia y que los use en las búsquedas. Ejemplo de mensaje:
+
+  ```
+  Hoy es 2026-10-10.
+
+  <partido>
+  Equipo local: Real Madrid
+  Equipo visitante: FC Barcelona
+  Fecha del partido: 2026-10-26
+  Competición: LaLiga
+  Sección: Fútbol
+  </partido>
+
+  Investiga el partido con las herramientas y escribe la previa con la predicción.
+  ```
+
+  Las líneas de competición y sección solo aparecen si se envían. Mantener los datos variables fuera del prompt de sistema hace que este sea idéntico en todas las peticiones.
 
   Cada llamada crea un `Agent` nuevo (el agente guarda el historial de la conversación, así que no se comparte entre peticiones) con un `BedrockModel`. La salida se obtiene con `structured_output_model`: Strands expone el modelo Pydantic como una herramienta y valida lo que devuelve el modelo. Los agentes no tocan la base de datos: el endpoint guarda el resultado.
 
